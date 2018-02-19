@@ -1,0 +1,12 @@
+{
+	"name" : "cakephp-queuedaemon-plugin/cakephp-queuedaemon-plugin",
+	"description" : "...",
+	"require" : {
+		"aws/aws-sdk-php" : "^3.48",
+		"ramsey/uuid" : "~3.7"
+	},
+	"config" : {
+		"vendor-dir" : "Vendor/",
+		"process-timeout" : 0
+	}
+}
