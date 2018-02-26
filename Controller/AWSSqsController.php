@@ -10,7 +10,7 @@ class AWSSqsController extends Controller
     public $configApp = 'default';
 
     public $viewClass = 'Json';
-    
+
     public $visibilitySQSTimeOut = 3600 * 4;
 
     protected $_mergeParent = 'AWSSqsController';
@@ -39,17 +39,17 @@ class AWSSqsController extends Controller
     }
 
     /**
-     * 
+     *
      * @param string $command
-     * @param array $params
+     * @param array|string $params
      * @param string $prio
      * @param boolean $dedupProtect
      * @throws MethodNotAllowedException
      */
-    public function enqueueCommand(string $command, array $params, $prio = 'normal', $dedupProtect = false)
+    public function enqueueCommand(string $command, $params = array(), $prio = 'normal', $dedupProtect = false)
     {
-        if (empty($command) || empty($params))
-            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data [command|params] ');
+        if (empty($command))
+            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data [command] ');
         
         $queue_data = Configure::read('QueueDaemon.APP.' . $this->configApp);
         
@@ -65,10 +65,14 @@ class AWSSqsController extends Controller
             )
         );
         
-        $messageBody = serialize($params);
+        if (! is_string($params))
+            $messageBody = serialize($params);
+        else
+            $messageBody = $params;
+        
         $sendResult = $this->sendMessage($queue_url, $messageAttributes, $messageBody, $dedupProtect)->toArray();
         $result = 'failed';
-        if( $sendResult['@metadata']['statusCode'] == 200 )
+        if ($sendResult['@metadata']['statusCode'] == 200)
             $result = 'ok';
         
         $this->set(array(
@@ -144,7 +148,7 @@ class AWSSqsController extends Controller
         $deleteResult = $this->deleteMessage($queue_url, $receiptHandle);
         
         $result = 'failed';
-        if( is_object($deleteResult) )
+        if (is_object($deleteResult))
             $result = $deleteResult['@metadata']['statusCode'] == 200 ? 'ok' : 'failed';
         
         $this->set(array(
@@ -257,5 +261,45 @@ class AWSSqsController extends Controller
             CakeLog::error($e->getMessage());
             return false;
         }
+    }
+
+    public function get()
+    {
+        $prio = 'normal';
+        if (! empty($this->request->query('prio')))
+            $prio = $this->request->query('prio');
+        
+        $max_messages = 1;
+        if (! empty($this->request->query('commands')))
+            $max_messages = $this->request->query('commands');
+        
+        $this->getQueuedCommands($prio, $max_messages);
+    }
+
+    public function post()
+    {
+        if (empty($this->request->data['command']))
+            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data  [command] ');
+        
+        $prio = 'normal';
+        if (! empty($this->request->query('prio')))
+            $prio = $this->request->query('prio');
+        
+        if (! empty($this->request->params['subgroup']))
+            $this->request->data['command'] = $this->request->params['subgroup'] . '__' . $this->request->data['command'];
+        
+        $this->enqueueCommand($this->request->data['command'], empty($this->request->data['params']) ? array() : $this->request->data['params'], $prio, empty($this->request->data['dedupProtection']) ? false : true);
+    }
+
+    public function delete()
+    {
+        if (empty($this->request->data['receiptHandle']))
+            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data  [receiptHandle] ');
+        
+        $prio = 'normal';
+        if (! empty($this->request->query('prio')))
+            $prio = $this->request->query('prio');
+        
+        $this->finishCommand($this->request->data['receiptHandle'], $prio);
     }
 }
