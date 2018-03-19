@@ -11,7 +11,7 @@ class AWSSqsShell extends QueueDaemonShell
 
     public $monitQueueDelay = 500000;
 
-    public $baseClass = 'AWS';
+    public $baseClass = '';
 
     public $maxFork = array();
 
@@ -92,7 +92,7 @@ class AWSSqsShell extends QueueDaemonShell
                         CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Method File [' . $class_file . ' for ' . $calledCommand . ']');
                         die();
                     }
-                    
+                    CakeLog::info(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Loading File  [' . $class_file . ']');
                     require $class_file;
                     
                     if (! is_callable(array(
@@ -361,22 +361,21 @@ class AWSSqsShell extends QueueDaemonShell
 
     public function processJob($messageId, $command, $params, $priority)
     {
-        $command = Inflector::camelize($command);
+        CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' command:' . $command . ' Params:[' . print_r($params, true) . ']');
+        
+        $callable_command = array(
+            $this->baseClass . Inflector::camelize($command),
+            'process'
+        );
         
         if (array_key_exists($command, $this->maxFork))
             return $this->multiProcessJob($messageId, $command, $params, $priority);
         
-        CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' command:' . $command . ' Params:[' . print_r($params, true) . ']');
-        if (is_callable(array(
-            $this->baseClass . $command,
-            'process'
-        ))) {
-            call_user_func(array(
-                $this->baseClass . $command,
-                'process'
-            ), $params);
+        if (is_callable($callable_command)) {
+            call_user_func($callable_command, $params);
         } else
-            CakeLog::warning(__METHOD__ . ' Method not found [' . $command . ']');
+            CakeLog::warning(__METHOD__ . ' Method not found [' . print_r($callable_command, true) . ']');
+        
         $this->finishCommand($messageId, $priority);
     }
 

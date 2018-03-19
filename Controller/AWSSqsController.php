@@ -9,6 +9,8 @@ class AWSSqsController extends Controller
 
     public $configApp = 'default';
 
+    public $baseClass = '';
+
     public $viewClass = 'Json';
 
     public $visibilitySQSTimeOut = 3600 * 4;
@@ -278,17 +280,19 @@ class AWSSqsController extends Controller
 
     public function post()
     {
-        if (empty($this->request->data['command']))
-            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data  [command] ');
+        if (empty($this->request->params['command']))
+            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Params  [command] ');
         
         $prio = 'normal';
         if (! empty($this->request->query('prio')))
             $prio = $this->request->query('prio');
         
         if (! empty($this->request->params['subgroup']))
-            $this->request->data['command'] = $this->request->params['subgroup'] . '__' . $this->request->data['command'];
+            $command = $this->request->params['subgroup'] . '_' . $this->request->params['command'];
+        else
+            $command = $this->request->params['command'];
         
-        $this->enqueueCommand($this->request->data['command'], empty($this->request->data['params']) ? array() : $this->request->data['params'], $prio, empty($this->request->data['dedupProtection']) ? false : true);
+        $this->enqueueCommand($command, empty($this->request->data['params']) ? array() : $this->request->data['params'], $prio, empty($this->request->data['dedupProtection']) ? false : true);
     }
 
     public function delete()
