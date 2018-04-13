@@ -244,7 +244,7 @@ class AWSSqsShell extends QueueDaemonShell
                     'params' => $params
                 );
             }
-            // CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Returning Commands ' . print_r($commands, true));
+            CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Returning Commands ' . print_r($commands, true));
             return $commands;
         }
         return $messages;
