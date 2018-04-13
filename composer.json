@@ -3,7 +3,8 @@
 	"description" : "...",
 	"require" : {
 		"aws/aws-sdk-php" : "^3.48",
-		"ramsey/uuid" : "~3.7"
+		"ramsey/uuid" : "~3.7",
+		"twilio/sdk": "3.13.1"
 	},
 	"config" : {
 		"vendor-dir" : "Vendor/",

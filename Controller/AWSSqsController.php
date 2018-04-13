@@ -22,13 +22,13 @@ class AWSSqsController extends Controller
         parent::__construct($request, $response);
         if (! Configure::read('QueueDaemon.AWS'))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.AWS] ');
-        
+
         if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.queues'))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.queues] ');
-        
+
         if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.uuid'))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.uuid] ');
-        
+
         if (Configure::read('QueueDaemon.AWS.region') && Configure::read('QueueDaemon.AWS.version') && Configure::read('QueueDaemon.AWS.key_id') && Configure::read('QueueDaemon.AWS.key_secret'))
             $this->AwsSqsClient = \Aws\Sqs\SqsClient::factory(array(
                 'region' => Configure::read('QueueDaemon.AWS.region'),
@@ -52,31 +52,31 @@ class AWSSqsController extends Controller
     {
         if (empty($command))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data [command] ');
-        
+
         $queue_data = Configure::read('QueueDaemon.APP.' . $this->configApp);
-        
+
         if (empty($queue_data['queues'][$prio]))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.queues' . $prio . ']');
-        
+
         $queue_url = $this->getQueueUrl($queue_data['queues'][$prio]);
-        
+
         $messageAttributes = array(
             "command" => array(
                 'DataType' => "String",
                 'StringValue' => $command
             )
         );
-        
+
         if (! is_string($params))
             $messageBody = serialize($params);
         else
             $messageBody = $params;
-        
+
         $sendResult = $this->sendMessage($queue_url, $messageAttributes, $messageBody, $dedupProtect)->toArray();
         $result = 'failed';
         if ($sendResult['@metadata']['statusCode'] == 200)
             $result = 'ok';
-        
+
         $this->set(array(
             'result' => $result,
             'data' => $result == 'ok' ? $sendResult['MessageId'] : array(),
@@ -85,7 +85,7 @@ class AWSSqsController extends Controller
                 'data'
             )
         ));
-        
+
         $this->render();
         $this->response->send();
         $this->_stop();
@@ -102,14 +102,14 @@ class AWSSqsController extends Controller
         $queue_data = Configure::read('QueueDaemon.APP.' . $this->configApp);
         if (empty($queue_data))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $configApp . '] ');
-        
+
         if (empty($queue_data['queues'][$prio]))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $configApp . '.queues.' . $prio . 'Missing] ');
-        
+
         $queue_url = $this->getQueueUrl($queue_data['queues'][$prio]);
-        
+
         $messages = $this->readMessages($queue_url, $max_messages);
-        
+
         $commands = array();
         if (is_array($messages)) {
             foreach ($messages as $msg) {
@@ -123,7 +123,7 @@ class AWSSqsController extends Controller
                 );
             }
         }
-        
+
         $this->set(array(
             'result' => $messages === false ? 'failed' : 'ok',
             'data' => ! empty($commands) ? $commands : $messages,
@@ -142,17 +142,17 @@ class AWSSqsController extends Controller
         $queue_data = Configure::read('QueueDaemon.APP.' . $this->configApp);
         if (empty($queue_data))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $configApp . '] ');
-        
+
         if (empty($queue_data['queues'][$prio]))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $configApp . '.queues.' . $prio . 'Missing] ');
-        
+
         $queue_url = $this->getQueueUrl($queue_data['queues'][$prio]);
         $deleteResult = $this->deleteMessage($queue_url, $receiptHandle);
-        
+
         $result = 'failed';
         if (is_object($deleteResult))
             $result = $deleteResult['@metadata']['statusCode'] == 200 ? 'ok' : 'failed';
-        
+
         $this->set(array(
             'result' => $result,
             'data' => array(),
@@ -270,28 +270,28 @@ class AWSSqsController extends Controller
         $prio = 'normal';
         if (! empty($this->request->query('prio')))
             $prio = $this->request->query('prio');
-        
+
         $max_messages = 1;
         if (! empty($this->request->query('commands')))
             $max_messages = $this->request->query('commands');
-        
+
         $this->getQueuedCommands($prio, $max_messages);
     }
 
     public function post()
     {
-        if (empty($this->request->params['command']))
+        if (empty($this->request->data['command']))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Params  [command] ');
-        
+
         $prio = 'normal';
         if (! empty($this->request->query('prio')))
             $prio = $this->request->query('prio');
-        
-        if (! empty($this->request->params['subgroup']))
-            $command = $this->request->params['subgroup'] . '_' . $this->request->params['command'];
+
+        if (! empty($this->request->data['subgroup']))
+            $command = $this->request->data['subgroup'] . '_' . $this->request->data['command'];
         else
-            $command = $this->request->params['command'];
-        
+            $command = $this->request->data['command'];
+
         $this->enqueueCommand($command, empty($this->request->data['params']) ? array() : $this->request->data['params'], $prio, empty($this->request->data['dedupProtection']) ? false : true);
     }
 
@@ -299,11 +299,11 @@ class AWSSqsController extends Controller
     {
         if (empty($this->request->data['receiptHandle']))
             throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data  [receiptHandle] ');
-        
+
         $prio = 'normal';
         if (! empty($this->request->query('prio')))
             $prio = $this->request->query('prio');
-        
+
         $this->finishCommand($this->request->data['receiptHandle'], $prio);
     }
 }
