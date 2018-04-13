@@ -144,6 +144,7 @@ class AWSSqsShell extends QueueDaemonShell
         foreach ($this->queue_priorities as $priority)
             $this->jobs[$priority] = array();
         while (true) {
+            $this->cleanChilds();
             foreach ($this->queue_priorities as $priority) {
                 $job = $this->getQueuedCommands($priority);
                 if (! empty($job)) {
@@ -154,10 +155,17 @@ class AWSSqsShell extends QueueDaemonShell
             
             reset($this->queue_priorities);
             $jobDispatched = false;
+            $jobForkedProcess = false;
             foreach ($this->queue_priorities as $priority) {
                 if (count($this->jobs[$priority]) > 0) {
                     foreach ($this->jobs[$priority] as $idx => $command_data) {
-                        $this->processJob($command_data['messageId'], $command_data['command'], $command_data['params'], $priority);
+                        $jobForkedProcess = false;
+                        $jobForkedProcess = $this->processJob($command_data['messageId'], array(
+                            $this->baseClass . Inflector::camelize($command_data['command']),
+                            'process'
+                        ), $command_data['params'], $priority);
+                        if ($jobForkedProcess != false)
+                            $this->forkedPIDS[] = $jobForkedProcess;
                         $jobDispatched = true;
                         unset($this->jobs[$priority][$idx]);
                     }
@@ -250,14 +258,32 @@ class AWSSqsShell extends QueueDaemonShell
         return $messages;
     }
 
+    public function cleanChilds()
+    {
+        if (! is_array($this->forkedPIDS) || count($this->forkedPIDS) == 0) {
+            return 0;
+        }
+        foreach ($this->forkedPIDS as $idx => $pdata) {
+            $status = null;
+            $pid = pcntl_waitpid($pdata['pid'], $status, WNOHANG);
+            if ($pid > 0) {
+                $this->out(__METHOD__ . " The '$pid' has been exited with code $status!!!");
+                unset($this->forkedPIDS[$idx]);
+                if ($status = 0) {
+                    $deleteResult = $this->deleteMessage($this->_queue_urls[$pdata['prio']], $this->_receipts_handlers[$pdata['messageId']])->toArray();
+                    if ($deleteResult['@metadata']['statusCode'] == 200) {
+                        CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Removing ' . $messageId);
+                        unset($this->_receipts_handlers[$messageId]);
+                        return true;
+                    }
+                }
+            }
+        }
+        return count($this->forkedPIDS);
+    }
+
     public function finishCommand($messageId, $prio = 'normal')
     {
-        $deleteResult = $this->deleteMessage($this->_queue_urls[$prio], $this->_receipts_handlers[$messageId])->toArray();
-        if ($deleteResult['@metadata']['statusCode'] == 200) {
-            // CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Removing ' . $messageId);
-            unset($this->_receipts_handlers[$messageId]);
-            return true;
-        }
         return false;
     }
 
@@ -359,42 +385,40 @@ class AWSSqsShell extends QueueDaemonShell
         }
     }
 
-    public function processJob($messageId, $command, $params, $priority)
+    public static function processJob($messageId, $callable_command, $params, $priority)
     {
         CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' command:' . $command . ' Params:[' . print_r($params, true) . ']');
+        if (array_key_exists($callable_command, $this->maxFork))
+            return self::multiProcessJob($messageId, $callable_command, $params, $priority);
         
-        $callable_command = array(
-            $this->baseClass . Inflector::camelize($command),
-            'process'
-        );
-        
-        if (array_key_exists($command, $this->maxFork))
-            return $this->multiProcessJob($messageId, $command, $params, $priority);
-        
-        if (is_callable($callable_command)) {
-            call_user_func($callable_command, $params);
-        } else
+        if (is_callable($callable_command))
+            return array(
+                'pid' => self::forkProcess($callable_command, $params),
+                'messageId' => $messageId,
+                'priority' => $priority
+            );
+        // $this->finishCommand($messageId, $priority);
+        else
             CakeLog::warning(__METHOD__ . ' Method not found [' . print_r($callable_command, true) . ']');
-        
-        $this->finishCommand($messageId, $priority);
     }
 
     public function multiProcessJob($messageId, $command, $params, $priority)
     {
-        $command = Inflector::camelize($command);
-        
-        CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' Command:' . $command . ' Params:[' . print_r($params, true) . ']');
-        if (is_callable(array(
-            $this->baseClass . $command,
-            'process'
-        ))) {
-            call_user_func(array(
-                $this->baseClass . $command,
-                'process'
-            ), $params);
-        } else
-            CakeLog::warning(__METHOD__ . ' Method not found [' . $command . ']');
-        $this->finishCommand($messageId, $priority);
+    /**
+     * $command = Inflector::camelize($command);
+     *
+     * CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' Command:' . $command . ' Params:[' . print_r($params, true) . ']');
+     * if (is_callable(array(
+     * $this->baseClass . $command,
+     * 'process'
+     * ))) {
+     * call_user_func(array(
+     * $this->baseClass . $command,
+     * 'process'
+     * ), $params);
+     * } else
+     * CakeLog::warning(__METHOD__ . ' Method not found [' . $command . ']');
+     */
     }
 
     /**
