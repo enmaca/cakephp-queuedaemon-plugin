@@ -38,17 +38,17 @@ class AWSSqsShell extends QueueDaemonShell
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.AWS] ');
             die();
         }
-        
+
         if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.queues')) {
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.queues] ');
             die();
         }
-        
+
         if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.uuid')) {
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.uuid] ');
             die();
         }
-        
+
         $this->AwsSqsClient = \Aws\Sqs\SqsClient::factory(array(
             'region' => Configure::read('QueueDaemon.AWS.region'),
             'version' => Configure::read('QueueDaemon.AWS.version'),
@@ -57,7 +57,7 @@ class AWSSqsShell extends QueueDaemonShell
                 'secret' => Configure::read('QueueDaemon.AWS.key_secret')
             )
         ));
-        
+
         foreach ($this->queue_priorities as $prio) {
             if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.queues.' . $prio)) {
                 CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.queues.' . $prio . ']');
@@ -71,14 +71,14 @@ class AWSSqsShell extends QueueDaemonShell
             CakeLog::info(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Mapping queue [' . Configure::read('QueueDaemon.APP.' . $this->configApp . '.queues.' . $prio) . '] => [' . $queue_url . ']');
             $this->_queue_urls[$prio] = $queue_url;
         }
-        
+
         if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.methods')) {
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.methods]');
             die();
         }
-        
+
         $this->maxFork = Configure::read('QueueDaemon.APP.' . $this->configApp . '.methods');
-        
+
         foreach ($this->maxFork as $baseSQSCommand => $baseSQSCommandData) {
             if (is_array($baseSQSCommandData)) {
                 /**
@@ -94,7 +94,7 @@ class AWSSqsShell extends QueueDaemonShell
                     }
                     CakeLog::info(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Loading File  [' . $class_file . ']');
                     require $class_file;
-                    
+
                     if (! is_callable(array(
                         $this->baseClass . $baseSQSCommand . $_baseSQSCommand,
                         'process'
@@ -102,7 +102,7 @@ class AWSSqsShell extends QueueDaemonShell
                         CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Can Not Call Method [' . $this->baseClass . $baseSQSCommand . $_baseSQSCommand . '::process]');
                         die();
                     }
-                    
+
                     $this->_valid_methods[$calledCommand] = array(
                         $this->baseClass . $baseSQSCommand . $_baseSQSCommand,
                         'process'
@@ -115,9 +115,9 @@ class AWSSqsShell extends QueueDaemonShell
                     CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Method File [' . $class_file . ' for ' . $_ucmethod);
                     die();
                 }
-                
+
                 require $class_file;
-                
+
                 if (! is_callable(array(
                     $this->baseClass . $baseSQSCommand,
                     'process'
@@ -125,7 +125,7 @@ class AWSSqsShell extends QueueDaemonShell
                     CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Can Not Call Method [' . $this->baseClass . $_ucmethod . '::process]');
                     die();
                 }
-                
+
                 $this->_valid_methods[$calledCommand] = array(
                     $this->baseClass . $baseSQSCommand,
                     'process'
@@ -152,7 +152,7 @@ class AWSSqsShell extends QueueDaemonShell
                     break;
                 }
             }
-            
+
             reset($this->queue_priorities);
             $jobDispatched = false;
             $jobForkedProcess = false;
@@ -192,21 +192,21 @@ class AWSSqsShell extends QueueDaemonShell
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data [Priority:' . $prio . ']');
             return false;
         }
-        
+
         if (empty($command) || empty($params)) {
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data [command|content]');
             return false;
         }
-        
+
         $queue_url = $this->_queue_urls[$prio];
-        
+
         $messageAttributes = array(
             "command" => array(
                 'DataType' => "String",
                 'StringValue' => $command
             )
         );
-        
+
         $messageBody = serialize($params);
         $sendResult = $this->sendMessage($queue_url, $messageAttributes, $messageBody, $dedupProtect)->toArray();
         if ($sendResult['@metadata']['statusCode'] == 200) {
@@ -228,24 +228,24 @@ class AWSSqsShell extends QueueDaemonShell
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Data [Priority:' . $prio . ']');
             return false;
         }
-        
+
         $messages = $this->readMessages($this->_queue_urls[$prio], $max_messages);
-        
+
         if (is_array($messages)) {
             $commands = array();
             foreach ($messages as $msg) {
                 if (empty($msg['MessageAttributes']['command']['StringValue']))
                     continue;
                 $this->_receipts_handlers[$msg['MessageId']] = $msg['ReceiptHandle'];
-                
+
                 if (empty($msg['Body']))
                     $params = array();
-                
+
                 $params = @unserialize($msg['Body']);
-                
+
                 if ($params === FALSE)
                     $params = $msg['Body'];
-                
+
                 $commands = array(
                     'messageId' => $msg['MessageId'],
                     'command' => $msg['MessageAttributes']['command']['StringValue'],
@@ -269,11 +269,11 @@ class AWSSqsShell extends QueueDaemonShell
             if ($pid > 0) {
                 $this->out(__METHOD__ . " The '$pid' has been exited with code $status!!!");
                 unset($this->forkedPIDS[$idx]);
-                if ($status = 0) {
-                    $deleteResult = $this->deleteMessage($this->_queue_urls[$pdata['prio']], $this->_receipts_handlers[$pdata['messageId']])->toArray();
+                if ($status == 0) {
+                    $deleteResult = $this->deleteMessage($this->_queue_urls[$pdata['priority']], $this->_receipts_handlers[$pdata['messageId']])->toArray();
                     if ($deleteResult['@metadata']['statusCode'] == 200) {
-                        CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Removing ' . $messageId);
-                        unset($this->_receipts_handlers[$messageId]);
+                        CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Removing ' . $pdata['messageId']);
+                        unset($this->_receipts_handlers[$pdata['messageId']]);
                         return true;
                     }
                 }
@@ -385,12 +385,12 @@ class AWSSqsShell extends QueueDaemonShell
         }
     }
 
-    public static function processJob($messageId, $callable_command, $params, $priority)
+    public function processJob($messageId, $callable_command, $params, $priority)
     {
-        CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' command:' . $command . ' Params:[' . print_r($params, true) . ']');
-        if (array_key_exists($callable_command, $this->maxFork))
-            return self::multiProcessJob($messageId, $callable_command, $params, $priority);
-        
+        CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' command:' . print_r($callable_command) . ' Params:[' . print_r($params, true) . ']');
+        // if (array_key_exists($callable_command, $this->maxFork))
+        //     return self::multiProcessJob($messageId, $callable_command, $params, $priority);
+
         if (is_callable($callable_command))
             return array(
                 'pid' => self::forkProcess($callable_command, $params),
