@@ -15,6 +15,8 @@ class AWSSqsShell extends QueueDaemonShell
 
     public $maxFork = array();
 
+    public $max_processes = 1;
+
     public $queue_priorities = array(
         'high',
         'normal',
@@ -49,6 +51,13 @@ class AWSSqsShell extends QueueDaemonShell
             die();
         }
 
+        if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.max_processes')) {
+            CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.max_processes] ');
+            die();
+        }
+
+
+
         $this->AwsSqsClient = \Aws\Sqs\SqsClient::factory(array(
             'region' => Configure::read('QueueDaemon.AWS.region'),
             'version' => Configure::read('QueueDaemon.AWS.version'),
@@ -57,6 +66,8 @@ class AWSSqsShell extends QueueDaemonShell
                 'secret' => Configure::read('QueueDaemon.AWS.key_secret')
             )
         ));
+
+        $this->max_processes = Configure::read('QueueDaemon.APP.' . $this->configApp . '.max_processes');
 
         foreach ($this->queue_priorities as $prio) {
             if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.queues.' . $prio)) {
@@ -153,29 +164,32 @@ class AWSSqsShell extends QueueDaemonShell
                 }
             }
 
-            reset($this->queue_priorities);
-            $jobDispatched = false;
-            $jobForkedProcess = false;
-            foreach ($this->queue_priorities as $priority) {
-                if (count($this->jobs[$priority]) > 0) {
+            if( count($this->cleanChilds()) <= $this->max_processes ){
+                reset($this->queue_priorities);
+                $jobDispatched = false;
+                $jobForkedProcess = false;
+                foreach ($this->queue_priorities as $priority) {
+                  if (count($this->jobs[$priority]) > 0) {
                     foreach ($this->jobs[$priority] as $idx => $command_data) {
-                        $jobForkedProcess = false;
-                        $jobForkedProcess = $this->processJob($command_data['messageId'], array(
-                            $this->baseClass . Inflector::camelize($command_data['command']),
-                            'process'
-                        ), $command_data['params'], $priority);
-                        if ($jobForkedProcess != false)
-                            $this->forkedPIDS[] = $jobForkedProcess;
-                        $jobDispatched = true;
-                        unset($this->jobs[$priority][$idx]);
+                      $jobForkedProcess = false;
+                      $jobForkedProcess = $this->processJob($command_data['messageId'], array(
+                        $this->baseClass . Inflector::camelize($command_data['command']),
+                        'process'
+                      ), $command_data['params'], $priority);
+                      if ($jobForkedProcess != false)
+                      $this->forkedPIDS[] = $jobForkedProcess;
+                      $jobDispatched = true;
+                      unset($this->jobs[$priority][$idx]);
                     }
                     // if we found
                     break;
+                  }
                 }
-            }
-            if ($jobDispatched)
+                if ($jobDispatched)
                 continue;
-            usleep($this->monitQueueDelay);
+                usleep($this->monitQueueDelay);
+            }
+
         }
     }
 
@@ -362,7 +376,7 @@ class AWSSqsShell extends QueueDaemonShell
             return $result;
         } catch (\Aws\Exception\AwsException $e) {
             CakeLog::error($e->getMessage());
-            return false;
+            //return false;
         }
         return true;
     }
