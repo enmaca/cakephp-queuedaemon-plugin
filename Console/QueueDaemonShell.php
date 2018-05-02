@@ -41,7 +41,9 @@ class QueueDaemonShell extends Shell
                     CakeLog::warning("Can't Fork Process because '" . print_r($callable_function, true) . "' is not callable");
                     exit(- 1);
                 }
-                exit(call_user_func($callable_function, $params));
+                // exit(call_user_func($callable_function, $params));
+                call_user_func($callable_function, $params);
+                exit(- 1);
             }
         }
     }

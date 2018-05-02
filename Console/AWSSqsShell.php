@@ -56,6 +56,10 @@ class AWSSqsShell extends QueueDaemonShell
             die();
         }
 
+        if (Configure::read('QueueDaemon.APP.' . $this->configApp . '.monit_queue_delay')) {
+            $this->monitQueueDelay = Configure::read('QueueDaemon.APP.' . $this->configApp . '.monit_queue_delay');
+        }
+
 
 
         $this->AwsSqsClient = \Aws\Sqs\SqsClient::factory(array(
@@ -164,20 +168,23 @@ class AWSSqsShell extends QueueDaemonShell
                 }
             }
 
-            if( count($this->cleanChilds()) <= $this->max_processes ){
+            if( count($this->forkedPIDS) <= $this->max_processes ){
                 reset($this->queue_priorities);
                 $jobDispatched = false;
                 $jobForkedProcess = false;
                 foreach ($this->queue_priorities as $priority) {
                   if (count($this->jobs[$priority]) > 0) {
                     foreach ($this->jobs[$priority] as $idx => $command_data) {
+
                       $jobForkedProcess = false;
                       $jobForkedProcess = $this->processJob($command_data['messageId'], array(
                         $this->baseClass . Inflector::camelize($command_data['command']),
                         'process'
                       ), $command_data['params'], $priority);
+
                       if ($jobForkedProcess != false)
-                      $this->forkedPIDS[] = $jobForkedProcess;
+                          $this->forkedPIDS[] = $jobForkedProcess;
+
                       $jobDispatched = true;
                       unset($this->jobs[$priority][$idx]);
                     }
@@ -186,7 +193,7 @@ class AWSSqsShell extends QueueDaemonShell
                   }
                 }
                 if ($jobDispatched)
-                continue;
+                    continue;
                 usleep($this->monitQueueDelay);
             }
 
@@ -280,6 +287,9 @@ class AWSSqsShell extends QueueDaemonShell
         foreach ($this->forkedPIDS as $idx => $pdata) {
             $status = null;
             $pid = pcntl_waitpid($pdata['pid'], $status, WNOHANG);
+
+            $this->out(__METHOD__ . " CURRENT PID :  '$pid' ");
+
             if ($pid > 0) {
                 $this->out(__METHOD__ . " The '$pid' has been exited with code $status!!!");
                 unset($this->forkedPIDS[$idx]);
@@ -414,6 +424,7 @@ class AWSSqsShell extends QueueDaemonShell
         // $this->finishCommand($messageId, $priority);
         else
             CakeLog::warning(__METHOD__ . ' Method not found [' . print_r($callable_command, true) . ']');
+            return false;
     }
 
     public function multiProcessJob($messageId, $command, $params, $priority)
