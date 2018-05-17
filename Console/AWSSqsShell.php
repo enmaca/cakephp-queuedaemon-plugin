@@ -56,8 +56,10 @@ class AWSSqsShell extends QueueDaemonShell
             die();
         }
 
-        if (Configure::read('QueueDaemon.APP.' . $this->configApp . '.monit_queue_delay')) {
+        if (!empty(Configure::read('QueueDaemon.APP.' . $this->configApp . '.monit_queue_delay'))) {
             $this->monitQueueDelay = Configure::read('QueueDaemon.APP.' . $this->configApp . '.monit_queue_delay');
+        }else{
+          $this->monitQueueDelay = 300000;
         }
 
 
@@ -147,9 +149,9 @@ class AWSSqsShell extends QueueDaemonShell
                 );
             }
         }
-        foreach ($this->_valid_methods as $apiMethod => $calledMethod) {
-            CakeLog::info(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Valid Api Request [' . $apiMethod . '] Method to Call [' . print_r($calledMethod, true) . ']');
-        }
+        // foreach ($this->_valid_methods as $apiMethod => $calledMethod) {
+        //     CakeLog::info(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Valid Api Request [' . $apiMethod . '] Method to Call [' . print_r($calledMethod, true) . ']');
+        // }
     }
 
     /**
@@ -159,16 +161,20 @@ class AWSSqsShell extends QueueDaemonShell
         foreach ($this->queue_priorities as $priority)
             $this->jobs[$priority] = array();
         while (true) {
-            $this->cleanChilds();
-            foreach ($this->queue_priorities as $priority) {
-                $job = $this->getQueuedCommands($priority);
-                if (! empty($job)) {
-                    $this->jobs[$priority][] = $job;
-                    break;
-                }
-            }
 
-            if( count($this->forkedPIDS) <= $this->max_processes ){
+            $this->cleanChilds();
+            if( count($this->_receipts_handlers) < $this->max_processes ){
+
+              foreach ($this->queue_priorities as $priority) {
+                  // $job = $this->getQueuedCommands($priority);
+                  $job = $this->getQueuedCommands($priority);
+
+                  if (! empty($job)) {
+                      $this->jobs[$priority][] = $job;
+                      break;
+                  }
+              }
+
                 reset($this->queue_priorities);
                 $jobDispatched = false;
                 $jobForkedProcess = false;
@@ -187,6 +193,7 @@ class AWSSqsShell extends QueueDaemonShell
 
                       $jobDispatched = true;
                       unset($this->jobs[$priority][$idx]);
+                      $this->cleanChilds();
                     }
                     // if we found
                     break;
@@ -194,8 +201,12 @@ class AWSSqsShell extends QueueDaemonShell
                 }
                 if ($jobDispatched)
                     continue;
-                usleep($this->monitQueueDelay);
+
             }
+            // else{
+              usleep($this->monitQueueDelay);
+            //   $this->cleanChilds();
+            // }
 
         }
     }
@@ -231,7 +242,7 @@ class AWSSqsShell extends QueueDaemonShell
         $messageBody = serialize($params);
         $sendResult = $this->sendMessage($queue_url, $messageAttributes, $messageBody, $dedupProtect)->toArray();
         if ($sendResult['@metadata']['statusCode'] == 200) {
-            // CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Sendind Command ' . $command . ' [' . $sendResult['MessageId'] . ']');
+            CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Sendind Command ' . $command . ' [' . $sendResult['MessageId'] . ']');
             return $sendResult['MessageId'];
         }
         return false;
@@ -273,7 +284,7 @@ class AWSSqsShell extends QueueDaemonShell
                     'params' => $params
                 );
             }
-            CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Returning Commands ' . print_r($commands, true));
+            // CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Returning Commands ' . print_r($commands, true));
             return $commands;
         }
         return $messages;
@@ -288,14 +299,19 @@ class AWSSqsShell extends QueueDaemonShell
             $status = null;
             $pid = pcntl_waitpid($pdata['pid'], $status, WNOHANG);
 
-            $this->out(__METHOD__ . " CURRENT PID :  '$pid' ");
 
             if ($pid > 0) {
                 $this->out(__METHOD__ . " The '$pid' has been exited with code $status!!!");
                 unset($this->forkedPIDS[$idx]);
                 if ($status == 0) {
-                    $deleteResult = $this->deleteMessage($this->_queue_urls[$pdata['priority']], $this->_receipts_handlers[$pdata['messageId']])->toArray();
-                    if ($deleteResult['@metadata']['statusCode'] == 200) {
+
+                    $deleteResult = $this->deleteMessage($this->_queue_urls[$pdata['priority']], $this->_receipts_handlers[$pdata['messageId']]);
+                    if(is_object($deleteResult)){
+                      $deleteResult = $deleteResult->toArray();
+                    }
+
+
+                    if ($deleteResult['@metadata']['statusCode'] == 200 || $deleteResult['@metadata']['statusCode'] == 400 ) {
                         CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Removing ' . $pdata['messageId']);
                         unset($this->_receipts_handlers[$pdata['messageId']]);
                         return true;
@@ -386,7 +402,9 @@ class AWSSqsShell extends QueueDaemonShell
             return $result;
         } catch (\Aws\Exception\AwsException $e) {
             CakeLog::error($e->getMessage());
-            //return false;
+            // CakeLog::error($e->getStatusCode());
+            // Status code 400 is bad request (Reason: The receipt handle has expired).
+            return array('@metadata' => array('statusCode' => $e->getStatusCode()));
         }
         return true;
     }
@@ -411,7 +429,7 @@ class AWSSqsShell extends QueueDaemonShell
 
     public function processJob($messageId, $callable_command, $params, $priority)
     {
-        CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' command:' . print_r($callable_command) . ' Params:[' . print_r($params, true) . ']');
+        // CakeLog::info(__METHOD__ . ' MessageId :' . $messageId . ' Priority:' . $priority . ' command:' . print_r($callable_command) . ' Params:[' . print_r($params, true) . ']');
         // if (array_key_exists($callable_command, $this->maxFork))
         //     return self::multiProcessJob($messageId, $callable_command, $params, $priority);
 
@@ -423,7 +441,7 @@ class AWSSqsShell extends QueueDaemonShell
             );
         // $this->finishCommand($messageId, $priority);
         else
-            CakeLog::warning(__METHOD__ . ' Method not found [' . print_r($callable_command, true) . ']');
+            // CakeLog::warning(__METHOD__ . ' Method not found [' . print_r($callable_command, true) . ']');
             return false;
     }
 
