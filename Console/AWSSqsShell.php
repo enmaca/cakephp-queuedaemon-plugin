@@ -32,7 +32,9 @@ class AWSSqsShell extends QueueDaemonShell
     private $_valid_methods = array();
 
     protected $jobs = array();
-
+    public $uses = array(
+      'EventManager'
+    );
     public function startup()
     {
         parent::startup();
@@ -62,7 +64,7 @@ class AWSSqsShell extends QueueDaemonShell
           $this->monitQueueDelay = 300000;
         }
 
-
+        // $EventManager = self::staticLoadModel('EventManager');
 
         $this->AwsSqsClient = \Aws\Sqs\SqsClient::factory(array(
             'region' => Configure::read('QueueDaemon.AWS.region'),
@@ -139,7 +141,7 @@ class AWSSqsShell extends QueueDaemonShell
                     $this->baseClass . $baseSQSCommand,
                     'process'
                 ))) {
-                    CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Can Not Call Method [' . $this->baseClass . $_ucmethod . '::process]');
+                    CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Can Not Call Method [' . $this->baseClass . @$_ucmethod . '::process]');
                     die();
                 }
 
@@ -303,6 +305,8 @@ class AWSSqsShell extends QueueDaemonShell
             if ($pid > 0) {
                 $this->out(__METHOD__ . " The '$pid' has been exited with code $status!!!");
                 unset($this->forkedPIDS[$idx]);
+
+                $errorProcess = false;
                 if ($status == 0) {
 
                     $deleteResult = $this->deleteMessage($this->_queue_urls[$pdata['priority']], $this->_receipts_handlers[$pdata['messageId']]);
@@ -311,12 +315,26 @@ class AWSSqsShell extends QueueDaemonShell
                     }
 
 
-                    if ($deleteResult['@metadata']['statusCode'] == 200 || $deleteResult['@metadata']['statusCode'] == 400 ) {
-                        CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Removing ' . $pdata['messageId']);
-                        unset($this->_receipts_handlers[$pdata['messageId']]);
-                        return true;
+                    if ( $deleteResult['@metadata']['statusCode'] != 200 ) {
+                        // CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Removing ' . $pdata['messageId']);
+                        // print_r($pdata);
+                        $errorProcess = true;
                     }
+                }else{
+                  $errorProcess = true;
                 }
+                if($errorProcess){
+                  print_r($pdata);
+                  $EventManagerLogToSave = array();
+                  $EventManagerLogToSave['EventManager']['exited_code'] = $status;
+                  $EventManagerLogToSave['EventManager']['message_body'] = serialize($pdata);
+                  $EventManagerLogToSave['EventManager']['command'] = @$pdata['command'];
+                  $this->EventManager->create();
+                  $this->EventManager->save($EventManagerLogToSave);
+                  $this->EventManager->clear();
+                }
+                unset($this->_receipts_handlers[$pdata['messageId']]);
+                return true;
             }
         }
         return count($this->forkedPIDS);
@@ -437,7 +455,8 @@ class AWSSqsShell extends QueueDaemonShell
             return array(
                 'pid' => self::forkProcess($callable_command, $params),
                 'messageId' => $messageId,
-                'priority' => $priority
+                'priority' => $priority,
+                'command' => $callable_command
             );
         // $this->finishCommand($messageId, $priority);
         else
