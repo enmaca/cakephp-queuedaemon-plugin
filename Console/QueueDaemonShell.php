@@ -4,6 +4,7 @@ App::uses('Shell', 'Console');
 class QueueDaemonShell extends Shell
 {
 
+    protected $logModel = null;
     /**
      *
      * @return integer pid
@@ -19,6 +20,10 @@ class QueueDaemonShell extends Shell
         return posix_getpid();
     }
 
+
+    public function setModel(  $StringModel ){
+      $this->logModel = $StringModel;
+    }
     /**
      *
      * @param array $callable_function
@@ -71,5 +76,19 @@ class QueueDaemonShell extends Shell
             }
         }
         return $exited_processes;
+    }
+
+    public static function staticLoadModel($modelClass = null)
+    {
+        list ($plugin, $modelClass) = pluginSplit($modelClass, true);
+
+        $model = ClassRegistry::init(array(
+            'class' => $plugin . $modelClass,
+            'alias' => $modelClass
+        ));
+        if (! $model) {
+            return null;
+        }
+        return $model;
     }
 }

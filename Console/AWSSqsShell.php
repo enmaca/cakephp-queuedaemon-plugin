@@ -32,9 +32,9 @@ class AWSSqsShell extends QueueDaemonShell
     private $_valid_methods = array();
 
     protected $jobs = array();
-    public $uses = array(
-      'EventManager'
-    );
+
+    public $uses = array();
+
     public function startup()
     {
         parent::startup();
@@ -324,14 +324,23 @@ class AWSSqsShell extends QueueDaemonShell
                   $errorProcess = true;
                 }
                 if($errorProcess){
-                  print_r($pdata);
+                  // $EventManager = self::staticLoadModel($this->logModel);
+                  $EventManager = self::staticLoadModel('EventManager');
+
                   $EventManagerLogToSave = array();
-                  $EventManagerLogToSave['EventManager']['exited_code'] = $status;
-                  $EventManagerLogToSave['EventManager']['message_body'] = serialize($pdata);
-                  $EventManagerLogToSave['EventManager']['command'] = @$pdata['command'];
-                  $this->EventManager->create();
-                  $this->EventManager->save($EventManagerLogToSave);
-                  $this->EventManager->clear();
+                  $EventManagerLogToSave[$this->logModel]['exited_code'] = $status;
+                  $EventManagerLogToSave[$this->logModel]['message_body'] = serialize($pdata);
+                  $EventManagerLogToSave[$this->logModel]['command'] = serialize($pdata['command']);
+                  try {
+                    $EventManager->create();
+                    $EventManager->save($EventManagerLogToSave);
+                    $EventManager->clear();
+
+                  } catch (\Exception $e) {
+                    print_r($e);
+                  }
+
+
                 }
                 unset($this->_receipts_handlers[$pdata['messageId']]);
                 return true;
