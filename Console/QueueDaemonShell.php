@@ -20,10 +20,6 @@ class QueueDaemonShell extends Shell
     }
 
     /**
-     *
-     * @param array $callable_function
-     * @param array $params
-     * @return number|unknown
      */
     public static function forkProcess(array $callable_function, $params = array())
     {
@@ -71,5 +67,32 @@ class QueueDaemonShell extends Shell
             }
         }
         return $exited_processes;
+    }
+
+    public static function staticLoadModel($modelClass = null)
+    {
+        list ($plugin, $modelClass) = pluginSplit($modelClass, true);
+        
+        $model = ClassRegistry::init(array(
+            'class' => $plugin . $modelClass,
+            'alias' => $modelClass
+        ));
+        if (! $model) {
+            return null;
+        }
+        return $model;
+    }
+
+    public static function paramsToString($params)
+    {
+        $tkey = array();
+        foreach ($params as $pkey => $value) {
+            if (is_string($value))
+                $tkey[] = $pkey . ':' . $value;
+            
+            if (is_array($value))
+                $tkey[] = $pkey . '( ' . self::paramsToString($value) . ' )';
+        }
+        return '[ ' . join('|', $tkey) . ' ]';
     }
 }
