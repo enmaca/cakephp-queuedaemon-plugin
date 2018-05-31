@@ -57,11 +57,6 @@ class AWSSqsShell extends QueueDaemonShell
             die();
         }
         
-        if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.max_processes')) {
-            CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.max_processes] ');
-            die();
-        }
-        
         if (! empty(Configure::read('QueueDaemon.APP.' . $this->configApp . '.monit_queue_delay')))
             $this->monitQueueDelay = Configure::read('QueueDaemon.APP.' . $this->configApp . '.monit_queue_delay');
         
@@ -79,7 +74,12 @@ class AWSSqsShell extends QueueDaemonShell
             )
         ));
         
-        $this->max_processes = Configure::read('QueueDaemon.APP.' . $this->configApp . '.max_processes');
+        if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.max_processes')) {
+            CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.max_processes] ');
+            $this->max_processes = 1;
+        } else {
+            $this->max_processes = Configure::read('QueueDaemon.APP.' . $this->configApp . '.max_processes');
+        }
         
         foreach ($this->queue_priorities as $prio) {
             if (! Configure::read('QueueDaemon.APP.' . $this->configApp . '.queues.' . $prio)) {
@@ -214,6 +214,8 @@ class AWSSqsShell extends QueueDaemonShell
                 }
                 if ($jobDispatched)
                     continue;
+            } else {
+                CakeLog::debug(__LINE__, ' ==>  CurrentProcess [' . count($this->_receipts_handlers) . '] Max Processes: [' . $this->max_processes . ']');
             }
             usleep($this->monitQueueDelay);
         }
@@ -467,14 +469,21 @@ class AWSSqsShell extends QueueDaemonShell
         if ($this->debug == true)
             CakeLog::debug('[' . __METHOD__ . ']  MessageId : ' . $messageId . ' Callable Command ' . join('::', $callable_command) . ' Priority: ' . $priority);
         
-        if (is_callable($callable_command))
+        if (is_callable($callable_command)) {
+            
+            if (is_array($params))
+                $params += array(
+                    'message_id' => $messageId,
+                    'command' => join('::', $callable_command)
+                );
+            
             return array(
                 'pid' => self::forkProcess($callable_command, $params),
                 'messageId' => $messageId,
                 'priority' => $priority,
                 'command' => $callable_command
             );
-        else {
+        } else {
             CakeLog::warning(__METHOD__ . ' Method not found [' . print_r($callable_command, true) . ']');
             $this->finishCommand($messageId, $priority);
         }
