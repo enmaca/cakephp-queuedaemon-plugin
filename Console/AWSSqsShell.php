@@ -181,7 +181,8 @@ class AWSSqsShell extends QueueDaemonShell
             
             // TODO: Por que evaluamos receipt handlers variable equivocada estamos evaluando procesos activos el correcto deberia de ser forkedPIDS
             if (count($this->forkedPIDS) < (int) $this->max_processes) {
-                CakeLog::debug(__LINE__ . ' ==>  CurrentProcess [' . count($this->forkedPIDS) . '] Max Processes: [' . $this->max_processes . ']');
+                if ($this->debug == true)
+                    CakeLog::debug(__LINE__ . ' ==>  CurrentProcess [' . count($this->forkedPIDS) . '] Max Processes: [' . $this->max_processes . ']');
                 foreach ($this->queue_priorities as $priority) {
                     $job = $this->getQueuedCommands($priority);
                     
@@ -196,7 +197,8 @@ class AWSSqsShell extends QueueDaemonShell
                 $jobForkedProcess = false;
                 foreach ($this->queue_priorities as $priority) {
                     if (count($this->jobs[$priority]) > 0) {
-                        CakeLog::debug(__LINE__ . ' ==>  Pending Jobs [' . count($this->jobs[$priority]) . '] => ' . print_r($this->jobs[$priority], true));
+                        if ($this->debug == true)
+                            CakeLog::debug(__LINE__ . ' ==>  Pending Jobs [' . count($this->jobs[$priority]) . '] => ' . print_r($this->jobs[$priority], true));
                         foreach ($this->jobs[$priority] as $idx => $command_data) {
                             $jobForkedProcess = false;
                             $jobForkedProcess = $this->processJob($command_data['messageId'], array(
@@ -223,7 +225,8 @@ class AWSSqsShell extends QueueDaemonShell
                 if ($jobDispatched)
                     continue;
             } else {
-                CakeLog::debug(__LINE__ . ' ==>  Wait Until [' . count($this->forkedPIDS) . '] < [' . $this->max_processes . ']');
+                if ($this->debug == true)
+                    CakeLog::debug(__LINE__ . ' ==>  Wait Until [' . count($this->forkedPIDS) . '] < [' . $this->max_processes . ']');
             }
             usleep($this->monitQueueDelay);
         }
@@ -260,7 +263,8 @@ class AWSSqsShell extends QueueDaemonShell
         $messageBody = serialize($params);
         $sendResult = $this->sendMessage($queue_url, $messageAttributes, $messageBody, $dedupProtect)->toArray();
         if ($sendResult['@metadata']['statusCode'] == 200) {
-            CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Sendind Command ' . $command . ' [' . $sendResult['MessageId'] . ']');
+            if ($this->debug == true)
+                CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Sendind Command ' . $command . ' [' . $sendResult['MessageId'] . ']');
             return $sendResult['MessageId'];
         }
         return false;
@@ -310,8 +314,8 @@ class AWSSqsShell extends QueueDaemonShell
             // CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Returning Commands ' . print_r($commands, true));
             return $commands;
         }
-        
-        CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Returning Messages result ' . print_r($messages, true));
+        if ($this->debug == true)
+            CakeLog::debug(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Returning Messages result ' . print_r($messages, true));
         return $messages;
     }
 
