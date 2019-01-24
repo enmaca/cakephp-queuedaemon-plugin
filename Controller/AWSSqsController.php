@@ -101,10 +101,10 @@ class AWSSqsController extends Controller
     {
         $queue_data = Configure::read('QueueDaemon.APP.' . $this->configApp);
         if (empty($queue_data))
-            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $configApp . '] ');
+            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '] ');
 
         if (empty($queue_data['queues'][$prio]))
-            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $configApp . '.queues.' . $prio . 'Missing] ');
+            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.APP.' . $this->configApp . '.queues.' . $prio . 'Missing] ');
 
         $queue_url = $this->getQueueUrl($queue_data['queues'][$prio]);
 
@@ -214,7 +214,7 @@ class AWSSqsController extends Controller
                 'QueueUrl' => $queue_url
             ));
             $messages = $result->get('Messages');
-            if (count($messages) > 0) {
+            if (! empty($messages) && count($messages) > 0) {
                 return $messages;
             } else {
                 // there aren't new messages return null
@@ -267,6 +267,9 @@ class AWSSqsController extends Controller
 
     public function get()
     {
+        /**
+         * TODO: Implementar Bien.
+         */
         $prio = 'normal';
         if (! empty($this->request->query('prio')))
             $prio = $this->request->query('prio');
@@ -280,17 +283,38 @@ class AWSSqsController extends Controller
 
     public function post()
     {
-        if (empty($this->request->data['command']))
-            throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Params  [command] ');
+        /**
+         * Soporte para construccion de comando via Router (params)
+         *
+         * Router::connect('/:psubgroup/:pcommand', array( 'controller' => $controller, "action" => "post", "[method]" => "POST", 'version' => 'v1' ));
+         *
+         * @var unknown $_subgroup
+         */
+        $_subgroup = '';
+        if (! empty($this->request->params['psubgroup']))
+            $_subgroup = $this->request->params['psubgroup'] . '_';
+
+        $_command = '';
+        if (! empty($this->request->params['pcommand']))
+            $_command = $this->request->params['pcommand'];
+
+        $_paramCommand = $_subgroup . $_command;
 
         $prio = 'normal';
         if (! empty($this->request->query('prio')))
             $prio = $this->request->query('prio');
 
-        if (! empty($this->request->data['subgroup']))
-            $command = $this->request->data['subgroup'] . '_' . $this->request->data['command'];
-        else
-            $command = $this->request->data['command'];
+        if (empty($_paramCommand)) {
+            if (empty($this->request->data['command']))
+                throw new MethodNotAllowedException(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Params  [command] ');
+
+            if (! empty($this->request->data['subgroup']))
+                $command = $this->request->data['subgroup'] . '_' . $this->request->data['command'];
+            else
+                $command = $this->request->data['command'];
+        } else {
+            $command = $_paramCommand;
+        }
 
         $this->enqueueCommand($command, empty($this->request->data['params']) ? array() : $this->request->data['params'], $prio, empty($this->request->data['dedupProtection']) ? false : true);
     }

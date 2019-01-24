@@ -17,6 +17,11 @@
 			<attribute name="composer" value="vendor"/>
 		</attributes>
 	</buildpathentry>
+	<buildpathentry kind="src" path="Vendor/twilio/sdk">
+		<attributes>
+			<attribute name="composer" value="vendor"/>
+		</attributes>
+	</buildpathentry>
 	<buildpathentry kind="src" path="Vendor/aws/aws-sdk-php/src">
 		<attributes>
 			<attribute name="composer" value="vendor"/>
@@ -42,7 +47,7 @@
 			<attribute name="composer" value="vendor"/>
 		</attributes>
 	</buildpathentry>
-	<buildpathentry kind="src" path="Vendor/paragonie/random_compat/lib">
+	<buildpathentry kind="src" path="Vendor/symfony/polyfill-ctype">
 		<attributes>
 			<attribute name="composer" value="vendor"/>
 		</attributes>
