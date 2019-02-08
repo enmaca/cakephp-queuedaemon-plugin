@@ -15,7 +15,7 @@ class QueueDaemonShell extends Shell
         if ($child)
             exit(0);
         posix_setsid();
-        chdir('/');
+        chdir('/tmp');
         umask(0);
         return posix_getpid();
     }
