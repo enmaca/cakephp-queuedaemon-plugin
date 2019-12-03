@@ -72,10 +72,24 @@ class AWSSqsController extends Controller
         else
             $messageBody = $params;
 
-        $sendResult = $this->sendMessage($queue_url, $messageAttributes, $messageBody, $dedupProtect)->toArray();
+        $sendResult = $this->sendMessage($queue_url, $messageAttributes, $messageBody, $dedupProtect);
+
+        if (! empty($sendResult))
+            $sendResult = $sendResult->toArray();
+
         $result = 'failed';
-        if ($sendResult['@metadata']['statusCode'] == 200)
+        if ($sendResult['@metadata']['statusCode'] == 200) {
             $result = 'ok';
+            $LogModel = Configure::read('QueueDaemon.LogModel');
+            if (! empty($LogModel)) {
+                $this->loadModel($LogModel);
+                $this->$LogModel->save([
+                    'message_id' => $sendResult['MessageId'],
+                    'params' => $messageBody,
+                    'priority' => $prio
+                ]);
+            }
+        }
 
         $this->set(array(
             'result' => $result,
@@ -86,9 +100,11 @@ class AWSSqsController extends Controller
             )
         ));
 
-        $this->render();
-        $this->response->send();
-        $this->_stop();
+        if ($this->autoRender === true) {
+            $this->render();
+            $this->response->send();
+            $this->_stop();
+        }
     }
 
     /**
@@ -132,9 +148,12 @@ class AWSSqsController extends Controller
                 'data'
             )
         ));
-        $this->render();
-        $this->response->send();
-        $this->_stop();
+
+        if ($this->autoRender === true) {
+            $this->render();
+            $this->response->send();
+            $this->_stop();
+        }
     }
 
     public function finishCommand($receiptHandle, $prio = 'normal')
@@ -161,9 +180,12 @@ class AWSSqsController extends Controller
                 'data'
             )
         ));
-        $this->render();
-        $this->response->send();
-        $this->_stop();
+
+        if ($this->autoRender === true) {
+            $this->render();
+            $this->response->send();
+            $this->_stop();
+        }
     }
 
     /**
@@ -187,6 +209,7 @@ class AWSSqsController extends Controller
             );
             return $this->AwsSqsClient->sendMessage($params);
         } catch (\Aws\Exception\AwsException $e) {
+            print_r($e->getMessage());
             CakeLog::error($e->getMessage());
             return false;
         }

@@ -44,6 +44,8 @@ class AWSSqsShell extends QueueDaemonShell
     public function startup()
     {
         parent::startup();
+        
+        
         if (! Configure::read('QueueDaemon.AWS')) {
             CakeLog::error(((Configure::read('debug') > 0) ? '[' . __METHOD__ . '] ' : '') . 'Missing Configure [QueueDaemon.AWS] ');
             die();
