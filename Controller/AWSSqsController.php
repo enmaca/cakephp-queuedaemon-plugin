@@ -77,34 +77,27 @@ class AWSSqsController extends Controller
         if (! empty($sendResult))
             $sendResult = $sendResult->toArray();
 
-        $result = 'failed';
-        if ($sendResult['@metadata']['statusCode'] == 200) {
-            $result = 'ok';
-            $LogModel = Configure::read('QueueDaemon.LogModel');
-            if (! empty($LogModel)) {
-                $this->loadModel($LogModel);
-                $this->$LogModel->save([
-                    'message_id' => $sendResult['MessageId'],
-                    'params' => $messageBody,
-                    'priority' => $prio
-                ]);
-            }
-        }
-
-        $this->set(array(
-            'result' => $result,
-            'data' => $result == 'ok' ? $sendResult['MessageId'] : array(),
-            '_serialize' => array(
-                'result',
-                'data'
-            )
-        ));
-
         if ($this->autoRender === true) {
+            $result = 'failed';
+            if ($sendResult['@metadata']['statusCode'] == 200)
+                $result = 'ok';
+
+            $this->set(array(
+                'result' => $result,
+                'data' => $result == 'ok' ? $sendResult['MessageId'] : array(),
+                '_serialize' => array(
+                    'result',
+                    'data'
+                )
+            ));
+
             $this->render();
             $this->response->send();
             $this->_stop();
-        }
+        } else if ($sendResult['@metadata']['statusCode'] == 200)
+            return $sendResult['MessageId'];
+        else
+            return false;
     }
 
     /**
@@ -339,7 +332,7 @@ class AWSSqsController extends Controller
             $command = $_paramCommand;
         }
 
-        $this->enqueueCommand($command, empty($this->request->data['params']) ? array() : $this->request->data['params'], $prio, empty($this->request->data['dedupProtection']) ? false : true);
+        return $this->enqueueCommand($command, empty($this->request->data['params']) ? array() : $this->request->data['params'], $prio, empty($this->request->data['dedupProtection']) ? false : true);
     }
 
     public function delete()
